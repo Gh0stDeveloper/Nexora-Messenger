@@ -1,0 +1,56 @@
+name: Extract project ZIP to main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ZIP_URL: https://raw.githubusercontent.com/Gh0stDeveloper/Nexora-Messenger/proyecto-zip/nexora_messenger_vps_source.zip
+
+jobs:
+  extract-project:
+    name: Extract Nexora Messenger project
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download uploaded ZIP from proyecto-zip
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/nexora_extract /tmp/nexora_project.zip
+          mkdir -p /tmp/nexora_extract
+          curl -fL "$ZIP_URL" -o /tmp/nexora_project.zip
+          unzip -q /tmp/nexora_project.zip -d /tmp/nexora_extract
+          test -d /tmp/nexora_extract/nexora_project
+
+      - name: Replace main content with extracted project
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows/unzip-project.yml' \
+            /tmp/nexora_extract/nexora_project/ ./
+          rm -f nexora_messenger_vps_source.zip
+          git status --short
+
+      - name: Commit extracted project to main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "feat: extract Nexora Messenger project"
+          git push origin HEAD:main
