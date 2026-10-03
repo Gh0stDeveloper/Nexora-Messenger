@@ -109,6 +109,43 @@ async function authRequired(req, res, next) {
   }
 }
 
+async function notifyRecipient(recipientId, payload) {
+  const { rows } = await pool.query('SELECT fcm_token FROM users WHERE uid=$1', [recipientId]);
+  const token = rows[0]?.fcm_token;
+  if (!token) return;
+
+  try {
+    await admin.messaging().send({
+      token,
+      notification: {
+        title: 'Nexora',
+        body: 'Tienes un mensaje cifrado nuevo',
+      },
+      data: {
+        chatId: payload.chatId,
+        messageId: payload.messageId,
+        senderId: payload.senderId,
+        kind: payload.kind,
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'nexora_messages',
+          tag: payload.chatId,
+        },
+      },
+    });
+  } catch (error) {
+    console.warn('[nexora-fcm] notification_failed', { recipientId, code: error.code, message: error.message });
+    if (
+      error.code === 'messaging/registration-token-not-registered' ||
+      error.code === 'messaging/invalid-registration-token'
+    ) {
+      await pool.query('UPDATE users SET fcm_token=NULL, updated_at=NOW() WHERE uid=$1', [recipientId]);
+    }
+  }
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, AVATAR_DIR),
@@ -193,6 +230,11 @@ app.post('/v1/relay/messages', authRequired, async (req, res) => {
     await pool.query('ROLLBACK');
     throw error;
   }
+
+  notifyRecipient(recipientId, { chatId, messageId, senderId, kind }).catch((error) => {
+    console.warn('[nexora-fcm] async_notification_failed', error.message);
+  });
+
   res.json({ ok: true, chatId, messageId });
 });
 
