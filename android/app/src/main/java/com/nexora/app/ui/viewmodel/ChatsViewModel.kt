@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 data class ChatsUiState(
     val chats: List<ChatEntity> = emptyList(),
     val recipientId: String = "",
-    val encryptedText: String = "",
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -24,6 +23,9 @@ class ChatsViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChatsUiState())
     val state: StateFlow<ChatsUiState> = _state.asStateFlow()
+
+    val currentUserId: String?
+        get() = repository.currentUserId
 
     init {
         viewModelScope.launch {
@@ -35,34 +37,33 @@ class ChatsViewModel(
     }
 
     fun updateRecipientId(value: String) = _state.update { it.copy(recipientId = value.trim(), error = null) }
-    fun updateEncryptedText(value: String) = _state.update { it.copy(encryptedText = value, error = null) }
 
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             runCatching { repository.syncChats() }
                 .onSuccess { _state.update { it.copy(loading = false) } }
-                .onFailure { error -> _state.update { it.copy(loading = false, error = error.localizedMessage ?: "No se pudieron sincronizar los chats") } }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            error = error.localizedMessage ?: "No se pudieron sincronizar los chats",
+                        )
+                    }
+                }
         }
     }
 
-    fun sendDemoEncryptedMessage() {
-        val snapshot = _state.value
-        if (snapshot.recipientId.isBlank() || snapshot.encryptedText.isBlank()) {
-            _state.update { it.copy(error = "Escribe UID destino y payload cifrado") }
-            return
+    fun newChatTarget(): Pair<String, String>? {
+        val recipientId = _state.value.recipientId.trim()
+        if (recipientId.isBlank()) {
+            _state.update { it.copy(error = "Escribe el UID destino") }
+            return null
         }
-        viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
-            runCatching {
-                repository.sendEncryptedText(
-                    recipientId = snapshot.recipientId,
-                    encryptedPayload = snapshot.encryptedText,
-                    iv = "local-dev-iv-${System.currentTimeMillis()}",
-                )
-            }
-                .onSuccess { _state.update { it.copy(loading = false, encryptedText = "") } }
-                .onFailure { error -> _state.update { it.copy(loading = false, error = error.localizedMessage ?: "No se pudo enviar") } }
-        }
+        return repository.chatIdFor(recipientId) to recipientId
+    }
+
+    fun openChatTarget(chat: ChatEntity): Pair<String, String> {
+        return chat.chatId to repository.otherParticipant(chat)
     }
 }
