@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [LocalProfileEntity::class, ChatEntity::class, MessageEntity::class],
     version = 1,
-    exportSchema = true,
+    exportSchema = false,
 )
 abstract class NexoraDatabase : RoomDatabase() {
     abstract fun dao(): NexoraDao
