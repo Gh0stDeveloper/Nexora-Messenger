@@ -28,7 +28,7 @@ class AuthViewModel(
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     fun updatePhone(value: String) = _state.update { it.copy(phone = value, error = null) }
-    fun updateCode(value: String) = _state.update { it.copy(code = value.filter(Char::isDigit).take(6), error = null) }
+    fun updateCode(value: String) = _state.update { it.copy(code = value.filter { char -> char.isDigit() }.take(6), error = null) }
 
     fun requestOtp(activity: Activity) {
         val phone = _state.value.phone.trim()
