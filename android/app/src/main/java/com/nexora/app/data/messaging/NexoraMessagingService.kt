@@ -28,9 +28,10 @@ class NexoraMessagingService : FirebaseMessagingService() {
         scope.launch {
             runCatching {
                 val auth = FirebaseAuth.getInstance()
-                if (auth.currentUser == null) return@launch
-                val api = RelayClientFactory.create(BuildConfig.NEXORA_RELAY_BASE_URL, auth)
-                api.syncFcmToken(FcmTokenRequest(token))
+                if (auth.currentUser != null) {
+                    val api = RelayClientFactory.create(BuildConfig.NEXORA_RELAY_BASE_URL, auth)
+                    api.syncFcmToken(FcmTokenRequest(token))
+                }
             }
         }
     }
