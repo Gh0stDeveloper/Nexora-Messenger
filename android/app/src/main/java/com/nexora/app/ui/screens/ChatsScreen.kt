@@ -1,5 +1,6 @@
 package com.nexora.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,7 +32,10 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ChatsScreen(viewModel: ChatsViewModel) {
+fun ChatsScreen(
+    viewModel: ChatsViewModel,
+    onOpenChat: (chatId: String, recipientId: String) -> Unit,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     Column(
@@ -52,7 +56,12 @@ fun ChatsScreen(viewModel: ChatsViewModel) {
 
         Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Enviar payload cifrado", fontWeight = FontWeight.Bold)
+                Text("Nuevo chat", fontWeight = FontWeight.Bold)
+                Text(
+                    "Usa el UID Firebase del destinatario. En una fase posterior se agregará búsqueda por teléfono/contactos.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
                 OutlinedTextField(
                     value = state.recipientId,
                     onValueChange = viewModel::updateRecipientId,
@@ -60,14 +69,16 @@ fun ChatsScreen(viewModel: ChatsViewModel) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = state.encryptedText,
-                    onValueChange = viewModel::updateEncryptedText,
-                    label = { Text("Payload cifrado") },
+                Button(
+                    enabled = !state.loading,
+                    onClick = {
+                        viewModel.newChatTarget()?.let { (chatId, recipientId) ->
+                            onOpenChat(chatId, recipientId)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Button(enabled = !state.loading, onClick = viewModel::sendDemoEncryptedMessage, modifier = Modifier.fillMaxWidth()) {
-                    Text("Enviar por relay")
+                ) {
+                    Text("Abrir chat")
                 }
             }
         }
@@ -81,7 +92,13 @@ fun ChatsScreen(viewModel: ChatsViewModel) {
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.chats, key = { it.chatId }) { chat ->
-                    ChatItem(chat)
+                    ChatItem(
+                        chat = chat,
+                        onClick = {
+                            val target = viewModel.openChatTarget(chat)
+                            onOpenChat(target.first, target.second)
+                        },
+                    )
                 }
             }
         }
@@ -89,8 +106,13 @@ fun ChatsScreen(viewModel: ChatsViewModel) {
 }
 
 @Composable
-private fun ChatItem(chat: ChatEntity) {
-    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+private fun ChatItem(chat: ChatEntity, onClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(chat.chatId, fontWeight = FontWeight.Bold)
             Text(chat.lastMessagePreview, color = MaterialTheme.colorScheme.primary)
