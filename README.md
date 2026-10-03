@@ -1,39 +1,47 @@
 # Nexora Messenger
 
-**Nexora Messenger** es una aplicación Android nativa de mensajería privada con registro por número telefónico, perfil de usuario, relay cifrado en VPS propio y almacenamiento local en el dispositivo.
+**Nexora Messenger** es una aplicación Android nativa de mensajería privada para el ecosistema Nexora. Usa registro por número telefónico, perfil con avatar en servidor propio, caché local, notificaciones push y un relay cifrado desplegable en VPS.
 
-El objetivo del proyecto es construir una alternativa moderna y profesional de mensajería: interfaz limpia, privacidad real, backend controlado por el dueño del proyecto y arquitectura preparada para crecer hacia grupos, multimedia, estados, llamadas y multi-dispositivo.
+El objetivo es construir una base real, controlada por el dueño del proyecto, sin depender de Supabase, Vercel Blob ni almacenamiento externo para los datos principales de mensajería.
 
 ## Estado actual
 
-Esta versión está preparada como **Android + servidor VPS**.
+La rama `main` ya contiene una base funcional creada directamente en el repositorio:
 
-Incluye en el paquete fuente generado:
-
-- App Android en **Kotlin + Jetpack Compose**.
-- Registro/login con **Firebase Auth por teléfono**.
-- Sincronización de **FCM token** para notificaciones.
-- Perfil con nombre obligatorio y avatar opcional.
-- Avatares guardados en el **VPS propio**, no en Firebase Storage.
-- Backend propio en **Node.js + Express**.
-- **PostgreSQL** para usuarios, chats y mensajes cifrados.
-- Relay de mensajes que guarda solo `encryptedPayload + iv`.
-- Docker Compose para levantar servidor y PostgreSQL.
-- Nginx + Certbot para HTTPS.
-- GitHub Actions para validar Android, backend, Docker y despliegue VPS.
+- Android nativo con **Kotlin + Jetpack Compose**.
+- Login por teléfono con **Firebase Auth OTP**.
+- Sincronización de **FCM token** con el VPS.
+- Servicio FCM real para token refresh y notificaciones locales.
+- Perfil obligatorio con nombre.
+- Avatar guardado en el **VPS propio**, no en Firebase Storage.
+- Room para perfiles, chats y mensajes locales.
+- Relay Android por Retrofit/OkHttp con `Authorization: Bearer <Firebase ID Token>`.
+- Pantalla de chats.
+- Pantalla `ChatDetail`.
+- Cifrado local **AES-GCM** antes de enviar mensajes al relay.
+- Backend VPS en **Node.js + Express**.
+- Base de datos **PostgreSQL**.
+- Docker Compose para API + PostgreSQL.
+- Nginx reverse proxy preparado.
+- Scripts de backup/restore para PostgreSQL + uploads.
+- GitHub Actions para validar backend, Docker y APK debug.
 
 ## Arquitectura
 
 ```text
-Nexora Android
+Android / Nexora Messenger
  ├─ Firebase Auth
  │   └─ OTP por número telefónico
  ├─ Firebase Cloud Messaging
- │   └─ notificaciones push
+ │   ├─ refresh de token
+ │   └─ notificación local de mensajes cifrados
  ├─ Room
- │   └─ caché local
+ │   ├─ perfil local
+ │   ├─ chats
+ │   └─ mensajes cifrados
  ├─ Android Keystore
- │   └─ clave local del dispositivo
+ │   ├─ identity public key
+ │   └─ AES-GCM local para payload de mensajes
  └─ HTTPS
      └─ VPS Relay API
 
@@ -41,23 +49,23 @@ VPS Nexora
  ├─ Nginx + TLS
  ├─ Node.js / Express
  ├─ PostgreSQL
- ├─ almacenamiento persistente de avatares
+ ├─ volumen persistente de uploads/avatars
+ ├─ backup/restore scripts
  └─ Docker Compose
 ```
 
 ## Seguridad del relay
 
-El servidor no recibe mensajes en texto plano. Cada mensaje se envía como payload cifrado:
+El servidor no debe recibir texto plano. La app cifra el mensaje en Android antes de enviarlo:
 
 ```json
 {
-  "chatId": "uid1_uid2",
-  "messageId": "uuid",
   "senderId": "uid1",
   "recipientId": "uid2",
   "kind": "TEXT",
   "encryptedPayload": "base64",
   "iv": "base64",
+  "messageId": "uuid",
   "timestamp": 1760000000000
 }
 ```
@@ -65,14 +73,27 @@ El servidor no recibe mensajes en texto plano. Cada mensaje se envía como paylo
 El backend:
 
 - verifica `Authorization: Bearer FIREBASE_ID_TOKEN`;
+- rechaza requests sin sesión válida;
 - comprueba que `senderId` sea el usuario autenticado;
-- valida `chatId` canónico;
-- bloquea previews enviados por cliente;
-- guarda siempre `Mensaje cifrado` como preview;
-- rechaza duplicados por `messageId`;
-- solo permite ACK de entrega/lectura al destinatario real.
+- guarda `encryptedPayload + iv`, no texto plano;
+- usa `Mensaje cifrado` como preview genérico;
+- guarda avatares en el VPS;
+- guarda usuarios, chats y mensajes en PostgreSQL.
 
-## Endpoints principales del VPS
+> Nota técnica: el cifrado actual es AES-GCM local antes del relay. La capa pendiente para E2EE completo tipo Signal es: bundles de prekeys, establecimiento de sesión por dispositivo, Double Ratchet y rotación de claves.
+
+## Estructura del repositorio
+
+```text
+android/                 App Android nativa Kotlin/Compose
+backend/vps-api/         API Node.js/Express del relay
+backend/vps/             Docker Compose, Nginx, scripts VPS
+backend/VPS_DEPLOYMENT.md
+.github/workflows/       CI y deploy VPS
+README.md                Documentación principal
+```
+
+## Endpoints principales
 
 ```text
 GET  /health
@@ -81,11 +102,9 @@ GET  /v1/relay/version
 POST /v1/relay/users/me/bootstrap
 POST /v1/relay/users/me/avatar
 POST /v1/relay/users/me/fcm-token
-GET  /v1/relay/users/:uid/public
 POST /v1/relay/messages
 GET  /v1/relay/chats
 GET  /v1/relay/chats/:chatId/messages
-POST /v1/relay/ack
 ```
 
 Todos los endpoints `/v1/relay/*` requieren:
@@ -97,81 +116,130 @@ Authorization: Bearer FIREBASE_ID_TOKEN
 ## Configuración Android
 
 1. Crea el proyecto en Firebase.
-2. Agrega la app Android con package:
+2. Activa **Phone Authentication**.
+3. Agrega una app Android con package:
 
 ```text
 com.nexora.app
 ```
 
-3. Descarga `google-services.json`.
-4. Colócalo en:
+4. Descarga `google-services.json`.
+5. Colócalo en:
 
 ```text
 android/app/google-services.json
 ```
 
-5. Compila apuntando al VPS:
+6. Compila apuntando al VPS:
 
 ```bash
 cd android
 gradle :app:assembleDebug -PNEXORA_RELAY_BASE_URL=https://api.tu-dominio.com
 ```
 
+Para emulador local:
+
+```bash
+gradle :app:assembleDebug -PNEXORA_RELAY_BASE_URL=http://10.0.2.2:8080
+```
+
 ## Configuración VPS
 
 ```bash
-sudo bash backend/vps/scripts/install-vps.sh
 sudo mkdir -p /opt/nexora
 sudo chown -R $USER:$USER /opt/nexora
 rsync -az ./ /opt/nexora/
 cd /opt/nexora/backend/vps
 cp .env.example .env
 nano .env
-./scripts/deploy.sh
+bash scripts/deploy.sh
 ```
 
 Variables mínimas:
 
 ```env
-DOMAIN=api.tu-dominio.com
+POSTGRES_DB=nexora
+POSTGRES_USER=nexora
 POSTGRES_PASSWORD=pon_una_password_larga
-DATABASE_URL=postgresql://nexora:pon_una_password_larga@postgres:5432/nexora
-FIREBASE_PROJECT_ID=tu-proyecto-firebase
 APP_PUBLIC_BASE_URL=https://api.tu-dominio.com
-UPLOAD_DIR=/app/uploads
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64_del_service_account
 MAX_AVATAR_BYTES=2097152
+MAX_CIPHERTEXT_BYTES=524288
+BACKUP_ROOT=/opt/nexora/backups
 ```
 
-## GitHub Actions previstos
+## Backup y restore
 
-- `CI`: Android debug APK, VPS API check, Docker build y Firebase Functions build.
-- `Android Build`: compilación rápida del APK debug.
-- `Deploy VPS Relay`: despliegue por SSH al VPS.
+Crear backup:
+
+```bash
+cd /opt/nexora/backend/vps
+bash scripts/backup.sh
+```
+
+Listar backups:
+
+```bash
+bash scripts/list-backups.sh
+```
+
+Restaurar backup:
+
+```bash
+bash scripts/restore.sh /opt/nexora/backups/20261003T000000Z
+```
+
+El backup incluye:
+
+- `postgres.sql.gz`
+- `uploads.tar.gz`
+- `env.snapshot`
+- `manifest.json`
+- `SHA256SUMS`
+
+## GitHub Actions
+
+Workflow principal:
+
+```text
+.github/workflows/ci.yml
+```
+
+Valida:
+
+- backend Node.js
+- `node --check server.js`
+- Docker build
+- Android debug APK
+- artifact APK debug
+
+Workflow de despliegue VPS:
+
+```text
+.github/workflows/deploy-vps.yml
+```
 
 Secrets recomendados:
 
 ```text
-GOOGLE_SERVICES_JSON
-NEXORA_RELAY_BASE_URL
 VPS_HOST
 VPS_USER
 VPS_SSH_KEY
 VPS_APP_DIR
+NEXORA_RELAY_BASE_URL
+GOOGLE_SERVICES_JSON
 ```
-
-## Nota de entrega
-
-El paquete fuente completo fue preparado como ZIP con Android + backend VPS + workflows. Si este repositorio se inicializó desde el conector, sube/descomprime ese paquete en la raíz del repo para dejar visible todo el árbol de código.
 
 ## Roadmap inmediato
 
-- Integrar sesiones E2EE por destinatario/dispositivo.
-- Agregar contactos por agenda telefónica con hashing.
-- Crear grupos con roles.
-- Añadir estados efímeros.
-- Añadir subida cifrada de imágenes/documentos al VPS.
-- Crear release firmado por GitHub Actions.
-- Añadir página web pública de descarga.
+- Capa E2EE completa por sesión/dispositivo.
+- Contactos por teléfono con hashing.
+- Búsqueda de usuario por número sin exponer teléfono público.
+- Entrega offline con TTL y ACK real.
+- Adjuntos cifrados: imagen, audio, documento.
+- Grupos.
+- Estados/stories efímeros.
+- Release firmado V1/V2/V3.
 
 ## Créditos
 
