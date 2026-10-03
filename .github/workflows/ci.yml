@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  backend-vps:
+    name: VPS API validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/vps-api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax check
+        run: node --check server.js
+
+      - name: Docker build
+        run: docker build -t nexora-vps-api:ci .
+
+  android:
+    name: Android debug build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Create Firebase config from example
+        run: cp app/google-services.example.json app/google-services.json
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug -PNEXORA_RELAY_BASE_URL=https://api.example.com
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
