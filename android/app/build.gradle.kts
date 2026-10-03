@@ -6,6 +6,10 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 android {
     namespace = "com.nexora.app"
     compileSdk = 36
@@ -19,6 +23,11 @@ android {
 
         val relayUrl = providers.gradleProperty("NEXORA_RELAY_BASE_URL").orNull ?: "http://10.0.2.2:8080"
         buildConfigField("String", "NEXORA_RELAY_BASE_URL", "\"$relayUrl\"")
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
