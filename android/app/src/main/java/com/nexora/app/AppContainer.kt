@@ -3,6 +3,7 @@ package com.nexora.app
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
+import com.nexora.app.data.crypto.AesGcmMessageCrypto
 import com.nexora.app.data.crypto.LocalKeyManager
 import com.nexora.app.data.local.NexoraDatabase
 import com.nexora.app.data.remote.RelayClientFactory
@@ -17,6 +18,7 @@ class AppContainer(context: Context) {
     private val database = NexoraDatabase.get(appContext)
     private val relayApi = RelayClientFactory.create(BuildConfig.NEXORA_RELAY_BASE_URL, auth)
     private val keyManager = LocalKeyManager(appContext)
+    private val messageCrypto = AesGcmMessageCrypto()
 
     val authRepository = AuthRepository(auth)
     val profileRepository = ProfileRepository(
@@ -31,5 +33,6 @@ class AppContainer(context: Context) {
         auth = auth,
         relayApi = relayApi,
         dao = database.dao(),
+        messageCrypto = messageCrypto,
     )
 }
