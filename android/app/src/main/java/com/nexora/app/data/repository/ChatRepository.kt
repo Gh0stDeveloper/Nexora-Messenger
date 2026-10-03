@@ -1,6 +1,7 @@
 package com.nexora.app.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
+import com.nexora.app.data.crypto.AesGcmMessageCrypto
 import com.nexora.app.data.local.ChatEntity
 import com.nexora.app.data.local.MessageEntity
 import com.nexora.app.data.local.NexoraDao
@@ -13,10 +14,27 @@ class ChatRepository(
     private val auth: FirebaseAuth,
     private val relayApi: RelayApi,
     private val dao: NexoraDao,
+    private val messageCrypto: AesGcmMessageCrypto,
 ) {
+    val currentUserId: String?
+        get() = auth.currentUser?.uid
+
     fun observeChats(): Flow<List<ChatEntity>> = dao.observeChats()
 
     fun observeMessages(chatId: String): Flow<List<MessageEntity>> = dao.observeMessages(chatId)
+
+    fun chatIdFor(recipientId: String): String {
+        val uid = requireNotNull(currentUserId) { "User must be signed in" }
+        return listOf(uid, recipientId.trim()).sorted().joinToString("_")
+    }
+
+    fun otherParticipant(chat: ChatEntity): String {
+        val uid = currentUserId.orEmpty()
+        return chat.participantIds.split(',')
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && it != uid }
+            ?: chat.participantIds
+    }
 
     suspend fun syncChats() {
         val response = relayApi.getChats()
@@ -54,19 +72,49 @@ class ChatRepository(
         )
     }
 
-    suspend fun sendEncryptedText(recipientId: String, encryptedPayload: String, iv: String) {
+    suspend fun sendTextMessage(recipientId: String, plainText: String): String {
         val uid = requireNotNull(auth.currentUser?.uid) { "User must be signed in" }
+        val cleanRecipient = recipientId.trim()
+        require(cleanRecipient.isNotBlank()) { "Recipient is required" }
+        require(plainText.isNotBlank()) { "Message is required" }
+
+        val encrypted = messageCrypto.encrypt(plainText.trim())
+        val messageId = UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
         val response = relayApi.sendMessage(
             SendMessageRequest(
                 senderId = uid,
-                recipientId = recipientId.trim(),
-                encryptedPayload = encryptedPayload,
-                iv = iv,
-                messageId = UUID.randomUUID().toString(),
-                timestamp = System.currentTimeMillis(),
+                recipientId = cleanRecipient,
+                encryptedPayload = encrypted.encryptedPayload,
+                iv = encrypted.iv,
+                messageId = messageId,
+                timestamp = timestamp,
+            ),
+        )
+
+        dao.upsertMessages(
+            listOf(
+                MessageEntity(
+                    chatId = response.chatId,
+                    messageId = messageId,
+                    senderId = uid,
+                    recipientId = cleanRecipient,
+                    kind = "TEXT",
+                    encryptedPayload = encrypted.encryptedPayload,
+                    iv = encrypted.iv,
+                    timestampMs = timestamp,
+                    delivered = false,
+                    read = false,
+                ),
             ),
         )
         syncMessages(response.chatId)
         syncChats()
+        return response.chatId
+    }
+
+    fun previewFor(message: MessageEntity): String {
+        return runCatching { messageCrypto.decrypt(message.encryptedPayload, message.iv) }
+            .getOrElse { "Mensaje cifrado" }
     }
 }
