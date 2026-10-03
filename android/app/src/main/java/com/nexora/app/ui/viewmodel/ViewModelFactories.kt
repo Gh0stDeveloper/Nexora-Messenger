@@ -32,3 +32,14 @@ class ChatsViewModelFactory(
         return ChatsViewModel(repository) as T
     }
 }
+
+class ChatDetailViewModelFactory(
+    private val repository: ChatRepository,
+    private val chatId: String,
+    private val recipientId: String,
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        @Suppress("UNCHECKED_CAST")
+        return ChatDetailViewModel(repository, chatId, recipientId) as T
+    }
+}
