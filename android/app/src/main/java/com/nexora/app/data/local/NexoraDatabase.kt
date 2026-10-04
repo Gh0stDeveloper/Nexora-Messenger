@@ -6,8 +6,15 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [LocalProfileEntity::class, ChatEntity::class, MessageEntity::class],
-    version = 1,
+    entities = [
+        LocalProfileEntity::class,
+        ContactEntity::class,
+        GroupEntity::class,
+        StatusEntity::class,
+        ChatEntity::class,
+        MessageEntity::class,
+    ],
+    version = 2,
     exportSchema = false,
 )
 abstract class NexoraDatabase : RoomDatabase() {
