@@ -6,6 +6,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
+import com.nexora.app.data.preview.PreviewSession
+import com.nexora.app.util.PhoneNumberNormalizer
 import com.nexora.app.util.await
 import java.util.concurrent.TimeUnit
 
@@ -13,10 +15,13 @@ class AuthRepository(
     private val auth: FirebaseAuth,
 ) {
     val currentUid: String?
-        get() = auth.currentUser?.uid
+        get() = PreviewSession.uid ?: auth.currentUser?.uid
 
     val currentPhone: String?
-        get() = auth.currentUser?.phoneNumber
+        get() = PreviewSession.phone ?: auth.currentUser?.phoneNumber
+
+    val isPreview: Boolean
+        get() = PreviewSession.active
 
     fun requestOtp(
         activity: Activity,
@@ -25,6 +30,13 @@ class AuthRepository(
         onAutoVerified: (String) -> Unit,
         onError: (Throwable) -> Unit,
     ) {
+        val normalized = PhoneNumberNormalizer.normalizeMexico(phone)
+        if (normalized == PreviewSession.PreviewPhone) {
+            PreviewSession.enable()
+            onCodeSent("preview-verification")
+            return
+        }
+
         val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
             override fun onVerificationCompleted(credential: PhoneAuthCredential) {
                 auth.signInWithCredential(credential)
@@ -45,7 +57,7 @@ class AuthRepository(
         }
 
         val options = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber(phone)
+            .setPhoneNumber(normalized)
             .setTimeout(60L, TimeUnit.SECONDS)
             .setActivity(activity)
             .setCallbacks(callbacks)
@@ -55,12 +67,17 @@ class AuthRepository(
     }
 
     suspend fun verifyCode(verificationId: String, code: String): String {
+        if (verificationId == "preview-verification" && code == PreviewSession.PreviewCode) {
+            PreviewSession.enable()
+            return PreviewSession.PreviewUid
+        }
         val credential = PhoneAuthProvider.getCredential(verificationId, code)
         val result = auth.signInWithCredential(credential).await()
         return requireNotNull(result.user?.uid) { "Firebase Auth did not return a UID" }
     }
 
     fun signOut() {
+        PreviewSession.disable()
         auth.signOut()
     }
 }
