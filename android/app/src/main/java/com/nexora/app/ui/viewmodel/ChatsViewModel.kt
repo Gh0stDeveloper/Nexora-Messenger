@@ -3,6 +3,7 @@ package com.nexora.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.app.data.local.ChatEntity
+import com.nexora.app.data.preview.PreviewSession
 import com.nexora.app.data.repository.ChatRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +11,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+data class PreviewChatTarget(
+    val title: String,
+    val subtitle: String,
+    val recipientId: String,
+)
 
 data class ChatsUiState(
     val chats: List<ChatEntity> = emptyList(),
@@ -26,6 +33,19 @@ class ChatsViewModel(
 
     val currentUserId: String?
         get() = repository.currentUserId
+
+    val previewTargets: List<PreviewChatTarget> = listOf(
+        PreviewChatTarget(
+            title = "Akira Preview",
+            subtitle = "Contacto de prueba",
+            recipientId = PreviewSession.FriendUid,
+        ),
+        PreviewChatTarget(
+            title = "Nexora Testers",
+            subtitle = "Grupo preview local",
+            recipientId = PreviewSession.GroupId,
+        ),
+    )
 
     init {
         viewModelScope.launch {
@@ -54,13 +74,18 @@ class ChatsViewModel(
         }
     }
 
+    fun targetFor(recipientId: String): Pair<String, String> {
+        val cleanRecipient = recipientId.trim()
+        return repository.chatIdFor(cleanRecipient) to cleanRecipient
+    }
+
     fun newChatTarget(): Pair<String, String>? {
         val recipientId = _state.value.recipientId.trim()
         if (recipientId.isBlank()) {
-            _state.update { it.copy(error = "Escribe el UID destino") }
+            _state.update { it.copy(error = "Escribe el UID destino o usa un contacto de prueba") }
             return null
         }
-        return repository.chatIdFor(recipientId) to recipientId
+        return targetFor(recipientId)
     }
 
     fun openChatTarget(chat: ChatEntity): Pair<String, String> {
