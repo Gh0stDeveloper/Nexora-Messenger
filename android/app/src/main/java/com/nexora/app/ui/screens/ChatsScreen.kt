@@ -17,11 +17,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexora.app.data.local.ChatEntity
 import com.nexora.app.ui.viewmodel.ChatsViewModel
+import com.nexora.app.ui.viewmodel.PreviewChatTarget
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -103,7 +104,8 @@ fun ChatsScreen(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf("Chats", "Contactos", "Grupos", "Estados").forEach { tab ->
-                        AssistChip(
+                        FilterChip(
+                            selected = activeTab == tab,
                             onClick = { activeTab = tab },
                             label = { Text(tab) },
                             modifier = Modifier.weight(1f),
@@ -113,9 +115,15 @@ fun ChatsScreen(
 
                 if (showComposer && activeTab == "Chats") {
                     NewChatCard(
+                        targets = viewModel.previewTargets,
                         recipientId = state.recipientId,
                         onRecipientChange = viewModel::updateRecipientId,
-                        onOpen = {
+                        onPreviewOpen = { target ->
+                            val resolved = viewModel.targetFor(target.recipientId)
+                            showComposer = false
+                            onOpenChat(resolved.first, resolved.second)
+                        },
+                        onManualOpen = {
                             viewModel.newChatTarget()?.let { (chatId, recipientId) ->
                                 showComposer = false
                                 onOpenChat(chatId, recipientId)
@@ -125,9 +133,21 @@ fun ChatsScreen(
                 }
 
                 when (activeTab) {
-                    "Contactos" -> PlaceholderPanel("Contactos", "Aquí se mostrará tu agenda sincronizada. El UID queda solo para preview/desarrollo.")
-                    "Grupos" -> PlaceholderPanel("Grupos", "Crea y administra grupos cifrados desde tu VPS.")
-                    "Estados" -> PlaceholderPanel("Estados", "Comparte estados cifrados que expiran automáticamente.")
+                    "Contactos" -> PreviewCollectionPanel(
+                        title = "Contactos",
+                        body = "Agenda preparada para sincronizar usuarios reales desde tu VPS.",
+                        rows = viewModel.previewTargets.map { it.title to it.subtitle },
+                    )
+                    "Grupos" -> PreviewCollectionPanel(
+                        title = "Grupos",
+                        body = "Grupos cifrados listos para miembros, roles y multimedia privada.",
+                        rows = listOf("Nexora Testers" to "Grupo preview local"),
+                    )
+                    "Estados" -> PreviewCollectionPanel(
+                        title = "Estados",
+                        body = "Estados cifrados con expiración automática. En preview se muestran datos locales.",
+                        rows = listOf("Ghost Developer" to "Probando Nexora Messenger"),
+                    )
                     else -> ChatList(
                         chats = state.chats,
                         loading = state.loading,
@@ -206,25 +226,54 @@ private fun OwnProfileCard(profileName: String, profilePhone: String, onClose: (
 }
 
 @Composable
-private fun NewChatCard(recipientId: String, onRecipientChange: (String) -> Unit, onOpen: () -> Unit) {
+private fun NewChatCard(
+    targets: List<PreviewChatTarget>,
+    recipientId: String,
+    onRecipientChange: (String) -> Unit,
+    onPreviewOpen: (PreviewChatTarget) -> Unit,
+    onManualOpen: () -> Unit,
+) {
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Nuevo chat de prueba", fontWeight = FontWeight.Black, fontSize = 18.sp)
-            Text("En producción se abrirá desde Contactos. El UID queda oculto dentro de este panel de preview.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Iniciar conversación", fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("Para probar sin servidor, abre un contacto preview. En producción esto saldrá de tu agenda real.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            targets.forEach { target ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onPreviewOpen(target) }
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Surface(modifier = Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(target.title.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(target.title, fontWeight = FontWeight.Bold)
+                        Text(target.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                    Text("Abrir", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+            }
             OutlinedTextField(
                 value = recipientId,
                 onValueChange = onRecipientChange,
-                label = { Text("UID destino") },
+                label = { Text("UID manual avanzado") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            FloatingActionButton(onClick = onOpen, containerColor = MaterialTheme.colorScheme.primary) {
-                Text("Abrir", color = MaterialTheme.colorScheme.onPrimary)
+            Button(onClick = onManualOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Text("Abrir UID manual")
             }
         }
     }
@@ -235,7 +284,7 @@ private fun ChatList(chats: List<ChatEntity>, loading: Boolean, error: String?, 
     if (loading) Text("Sincronizando…", color = MaterialTheme.colorScheme.primary)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     if (chats.isEmpty()) {
-        PlaceholderPanel("Sin conversaciones", "Toca Nuevo chat para abrir una conversación de prueba. Después se llenará desde contactos reales.")
+        PreviewCollectionPanel("Sin conversaciones", "Toca Nuevo chat para abrir una conversación de prueba. Después se llenará desde contactos reales.", emptyList())
         return
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -246,15 +295,28 @@ private fun ChatList(chats: List<ChatEntity>, loading: Boolean, error: String?, 
 }
 
 @Composable
-private fun PlaceholderPanel(title: String, body: String) {
+private fun PreviewCollectionPanel(title: String, body: String, rows: List<Pair<String, String>>) {
     Card(
         shape = RoundedCornerShape(26.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, fontWeight = FontWeight.Black, fontSize = 19.sp)
             Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            rows.forEach { row ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(modifier = Modifier.size(38.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(row.first.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    Column {
+                        Text(row.first, fontWeight = FontWeight.Bold)
+                        Text(row.second, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                }
+            }
         }
     }
 }
