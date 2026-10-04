@@ -43,6 +43,7 @@ class ProfileViewModel(
     }
 
     fun updateName(value: String) = _state.update { it.copy(name = value.take(80), error = null) }
+
     fun updateAvatar(uri: Uri?) = _state.update { it.copy(avatarUri = uri, error = null) }
 
     fun completeProfile() {
@@ -51,10 +52,48 @@ class ProfileViewModel(
             _state.update { it.copy(loading = true, error = null) }
             runCatching { repository.completeProfile(snapshot.name, snapshot.avatarUri) }
                 .onSuccess { profile ->
-                    _state.update { it.copy(loading = false, completed = true, profile = profile) }
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            completed = true,
+                            profile = profile,
+                            name = profile.name,
+                        )
+                    }
                 }
                 .onFailure { error ->
-                    _state.update { it.copy(loading = false, error = error.localizedMessage ?: "No se pudo guardar el perfil") }
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            error = error.localizedMessage ?: "No se pudo guardar el perfil",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun saveDisplayName(value: String) {
+        val cleanName = value.take(80)
+        viewModelScope.launch {
+            _state.update { it.copy(name = cleanName, loading = true, error = null) }
+            runCatching { repository.updateDisplayName(cleanName) }
+                .onSuccess { profile ->
+                    _state.update {
+                        it.copy(
+                            name = profile.name,
+                            profile = profile,
+                            loading = false,
+                            completed = true,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            error = error.localizedMessage ?: "No se pudo actualizar el perfil",
+                        )
+                    }
                 }
         }
     }
