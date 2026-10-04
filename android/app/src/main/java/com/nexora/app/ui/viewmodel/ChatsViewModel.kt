@@ -3,6 +3,9 @@ package com.nexora.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexora.app.data.local.ChatEntity
+import com.nexora.app.data.local.ContactEntity
+import com.nexora.app.data.local.GroupEntity
+import com.nexora.app.data.local.StatusEntity
 import com.nexora.app.data.preview.PreviewSession
 import com.nexora.app.data.repository.ChatRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +23,9 @@ data class PreviewChatTarget(
 
 data class ChatsUiState(
     val chats: List<ChatEntity> = emptyList(),
+    val contacts: List<ContactEntity> = emptyList(),
+    val groups: List<GroupEntity> = emptyList(),
+    val statuses: List<StatusEntity> = emptyList(),
     val recipientId: String = "",
     val loading: Boolean = false,
     val error: String? = null,
@@ -48,12 +54,31 @@ class ChatsViewModel(
     )
 
     init {
+        observeLocalSections()
+        refresh()
+    }
+
+    private fun observeLocalSections() {
         viewModelScope.launch {
             repository.observeChats().collectLatest { chats ->
                 _state.update { it.copy(chats = chats) }
             }
         }
-        refresh()
+        viewModelScope.launch {
+            repository.observeContacts().collectLatest { contacts ->
+                _state.update { it.copy(contacts = contacts) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeGroups().collectLatest { groups ->
+                _state.update { it.copy(groups = groups) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeStatuses().collectLatest { statuses ->
+                _state.update { it.copy(statuses = statuses) }
+            }
+        }
     }
 
     fun updateRecipientId(value: String) = _state.update { it.copy(recipientId = value.trim(), error = null) }
@@ -84,7 +109,7 @@ class ChatsViewModel(
     fun newChatTarget(): Pair<String, String>? {
         val recipientId = _state.value.recipientId.trim()
         if (recipientId.isBlank()) {
-            _state.update { it.copy(error = "Escribe el UID destino o usa un contacto de prueba") }
+            _state.update { it.copy(error = "Escribe el UID destino o selecciona un contacto") }
             return null
         }
         return targetFor(recipientId)
@@ -93,4 +118,6 @@ class ChatsViewModel(
     fun openChatTarget(chat: ChatEntity): Pair<String, String> {
         return chat.chatId to repository.otherParticipant(chat)
     }
+
+    fun previewStatus(status: StatusEntity): String = repository.previewStatus(status)
 }
