@@ -37,10 +37,14 @@ class AuthViewModel(
 
     fun updateCode(value: String) = _state.update { it.copy(code = value.filter { char -> char.isDigit() }.take(6), error = null) }
 
+    fun resetToPhoneEntry() {
+        _state.update { it.copy(code = "", verificationId = null, loading = false, error = null) }
+    }
+
     fun requestOtp(activity: Activity) {
         val normalized = PhoneNumberNormalizer.normalizeMexico(_state.value.phone)
         if (!PhoneNumberNormalizer.isValidMexico(normalized)) {
-            _state.update { it.copy(error = "Escribe tu número de México: +52 y 10 dígitos. El 1 es opcional.") }
+            _state.update { it.copy(error = "Escribe un número válido. Para México usa 10 dígitos; Nexora agrega +52 automáticamente.") }
             return
         }
         _state.update { it.copy(loading = true, error = null, normalizedPhone = normalized) }
