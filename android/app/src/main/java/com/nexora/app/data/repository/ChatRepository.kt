@@ -27,6 +27,12 @@ class ChatRepository(
 
     fun observeMessages(chatId: String): Flow<List<MessageEntity>> = dao.observeMessages(chatId)
 
+    fun observeContacts(): Flow<List<ContactEntity>> = dao.observeContacts()
+
+    fun observeGroups(): Flow<List<GroupEntity>> = dao.observeGroups()
+
+    fun observeStatuses(): Flow<List<StatusEntity>> = dao.observeActiveStatuses()
+
     fun chatIdFor(recipientId: String): String {
         val uid = requireNotNull(currentUserId) { "User must be signed in" }
         return listOf(uid, recipientId.trim()).sorted().joinToString("_")
@@ -150,6 +156,11 @@ class ChatRepository(
     fun previewFor(message: MessageEntity): String {
         return runCatching { messageCrypto.decrypt(message.encryptedPayload, message.iv) }
             .getOrElse { "Mensaje cifrado" }
+    }
+
+    fun previewStatus(status: StatusEntity): String {
+        return runCatching { messageCrypto.decrypt(status.encryptedPayload, status.iv) }
+            .getOrElse { "Estado cifrado" }
     }
 
     private suspend fun seedPreviewData() {
