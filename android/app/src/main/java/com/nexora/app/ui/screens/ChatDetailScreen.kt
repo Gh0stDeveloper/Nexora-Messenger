@@ -1,6 +1,8 @@
 package com.nexora.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +18,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -28,6 +35,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +51,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val NexoraEmojiRows = listOf(
+    listOf("😀", "😁", "😂", "🤣", "😊", "😍", "😘", "😎"),
+    listOf("😐", "😅", "🥹", "😴", "😡", "😭", "😇", "🤔"),
+    listOf("👍", "👎", "👏", "🙏", "🔥", "✨", "💯", "❤️"),
+    listOf("💬", "📎", "🎮", "🎧", "📷", "🎵", "🚀", "🛡️"),
+)
+
 @Composable
 fun ChatDetailScreen(
     viewModel: ChatDetailViewModel,
@@ -48,6 +65,7 @@ fun ChatDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentUid = viewModel.currentUserId.orEmpty()
+    var showEmojiPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -63,8 +81,14 @@ fun ChatDetailScreen(
             MessageComposer(
                 input = state.input,
                 loading = state.loading,
+                showEmojiPicker = showEmojiPicker,
+                onToggleEmojiPicker = { showEmojiPicker = !showEmojiPicker },
+                onEmojiSelected = { emoji -> viewModel.updateInput(state.input + emoji) },
                 onInputChange = viewModel::updateInput,
-                onSend = viewModel::send,
+                onSend = {
+                    showEmojiPicker = false
+                    viewModel.send()
+                },
             )
         },
     ) { paddingValues ->
@@ -106,7 +130,7 @@ private fun ChatTopBar(title: String, subtitle: String, onBack: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) { Text("←", fontSize = 27.sp, fontWeight = FontWeight.Black) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Volver") }
             Surface(modifier = Modifier.size(44.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(title.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -117,24 +141,57 @@ private fun ChatTopBar(title: String, subtitle: String, onBack: () -> Unit) {
                 Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
             }
             Text("Perfil", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text("⋮", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            IconButton(onClick = {}) { Icon(Icons.Filled.MoreVert, contentDescription = "Opciones") }
         }
     }
 }
 
 @Composable
-private fun MessageComposer(input: String, loading: Boolean, onInputChange: (String) -> Unit, onSend: () -> Unit) {
+private fun MessageComposer(
+    input: String,
+    loading: Boolean,
+    showEmojiPicker: Boolean,
+    onToggleEmojiPicker: () -> Unit,
+    onEmojiSelected: (String) -> Unit,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+) {
     Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            AnimatedVisibility(visible = showEmojiPicker) {
+                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Emojis Nexora", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                        NexoraEmojiRows.forEach { row ->
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                row.forEach { emoji ->
+                                    Text(
+                                        text = emoji,
+                                        fontSize = 24.sp,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { onEmojiSelected(emoji) }
+                                            .padding(8.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("☺", fontSize = 22.sp)
-                Text("＋", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black)
+                IconButton(onClick = onToggleEmojiPicker) {
+                    Icon(Icons.Filled.EmojiEmotions, contentDescription = "Mostrar emojis")
+                }
+                IconButton(onClick = {}) {
+                    Icon(Icons.Filled.AttachFile, contentDescription = "Adjuntar archivo", tint = MaterialTheme.colorScheme.primary)
+                }
                 OutlinedTextField(
                     value = input,
                     onValueChange = onInputChange,
@@ -144,7 +201,9 @@ private fun MessageComposer(input: String, loading: Boolean, onInputChange: (Str
                     maxLines = 4,
                     shape = RoundedCornerShape(24.dp),
                 )
-                Button(enabled = !loading, onClick = onSend, shape = RoundedCornerShape(22.dp)) { Text("Enviar") }
+                Button(enabled = !loading && input.isNotBlank(), onClick = onSend, shape = RoundedCornerShape(22.dp)) {
+                    Icon(Icons.Filled.Send, contentDescription = "Enviar")
+                }
             }
             Text(
                 "Texto, multimedia y stickers se preparan para cifrado local antes del relay.",
