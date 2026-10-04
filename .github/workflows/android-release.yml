@@ -1,0 +1,70 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      relay_url:
+        description: "Nexora VPS relay URL"
+        required: true
+        default: "https://api.example.com"
+      version_name:
+        description: "Release tag/version"
+        required: true
+        default: "1.2.0-dev"
+
+jobs:
+  release:
+    name: Signed APK release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform
+        run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Restore Firebase config
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > app/google-services.json
+          else
+            cp app/google-services.example.json app/google-services.json
+          fi
+
+      - name: Restore keystore
+        run: |
+          echo "${{ secrets.NEXORA_KEYSTORE_BASE64 }}" | base64 -d > nexora-release.jks
+
+      - name: Build signed release APK
+        run: |
+          gradle :app:assembleRelease \
+            -PNEXORA_RELAY_BASE_URL=${{ inputs.relay_url }} \
+            -PNEXORA_KEYSTORE_FILE=$PWD/nexora-release.jks \
+            -PNEXORA_KEYSTORE_PASSWORD=${{ secrets.NEXORA_KEYSTORE_PASSWORD }} \
+            -PNEXORA_KEY_ALIAS=${{ secrets.NEXORA_KEY_ALIAS }} \
+            -PNEXORA_KEY_PASSWORD=${{ secrets.NEXORA_KEY_PASSWORD }}
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-signed-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
