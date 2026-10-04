@@ -1,8 +1,6 @@
 package com.nexora.app.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,15 +28,11 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.outlined.Chat
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,7 +67,7 @@ private enum class MessengerTab(val label: String, val icon: ImageVector) {
     Chats("Chats", Icons.Filled.Chat),
     Contacts("Contactos", Icons.Filled.Person),
     Groups("Grupos", Icons.Filled.Group),
-    Status("Estados", Icons.Outlined.Chat),
+    Status("Estados", Icons.Filled.Chat),
 }
 
 private data class PreviewPerson(
@@ -153,7 +147,7 @@ fun ChatsScreen(
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                MessengerTab.entries.forEach { tab ->
+                MessengerTab.values().forEach { tab ->
                     NavigationBarItem(
                         selected = activeTab == tab,
                         onClick = { activeTab = tab; showComposer = false },
@@ -225,34 +219,29 @@ fun ChatsScreen(
                 )
             }
 
-            AnimatedContent(targetState = activeTab, label = "tab-content") { tab ->
-                when (tab) {
-                    MessengerTab.Chats -> ChatList(
-                        chats = state.chats,
-                        query = searchQuery,
-                        loading = state.loading,
-                        error = state.error,
-                        onOpenChat = { chat ->
-                            val target = viewModel.openChatTarget(chat)
-                            onOpenChat(target.first, target.second)
-                        },
-                    )
-                    MessengerTab.Contacts -> ContactsSection(
-                        people = previewPeople,
-                        query = searchQuery,
-                        onOpenProfile = { selectedPerson = it },
-                        onOpenChat = { person -> onOpenChat(viewModel.previewChatFor(person.uid).first, person.uid) },
-                    )
-                    MessengerTab.Groups -> GroupsSection(
-                        groups = previewGroups,
-                        query = searchQuery,
-                        onOpenGroup = { group -> onOpenChat(group.id, group.id) },
-                    )
-                    MessengerTab.Status -> StatusSection(
-                        statuses = previewStatuses,
-                        query = searchQuery,
-                    )
-                }
+            when (activeTab) {
+                MessengerTab.Chats -> ChatList(
+                    chats = state.chats,
+                    query = searchQuery,
+                    loading = state.loading,
+                    error = state.error,
+                    onOpenChat = { chat ->
+                        val target = viewModel.openChatTarget(chat)
+                        onOpenChat(target.first, target.second)
+                    },
+                )
+                MessengerTab.Contacts -> ContactsSection(
+                    people = previewPeople,
+                    query = searchQuery,
+                    onOpenProfile = { selectedPerson = it },
+                    onOpenChat = { person -> onOpenChat(viewModel.previewChatFor(person.uid).first, person.uid) },
+                )
+                MessengerTab.Groups -> GroupsSection(
+                    groups = previewGroups,
+                    query = searchQuery,
+                    onOpenGroup = { group -> onOpenChat(group.id, group.id) },
+                )
+                MessengerTab.Status -> StatusSection(statuses = previewStatuses, query = searchQuery)
             }
         }
     }
@@ -382,7 +371,10 @@ private fun ChatList(chats: List<ChatEntity>, query: String, loading: Boolean, e
 @Composable
 private fun ContactsSection(people: List<PreviewPerson>, query: String, onOpenProfile: (PreviewPerson) -> Unit, onOpenChat: (PreviewPerson) -> Unit) {
     val filtered = people.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query, true) || it.status.contains(query, true) }
-    if (filtered.isEmpty()) { EmptyPanel("Sin contactos", "No hay contactos que coincidan con la búsqueda."); return }
+    if (filtered.isEmpty()) {
+        EmptyPanel("Sin contactos", "No hay contactos que coincidan con la búsqueda.")
+        return
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(filtered, key = { it.uid }) { person -> ContactRow(person, onOpenProfile = { onOpenProfile(person) }, onOpenChat = { onOpenChat(person) }) }
     }
@@ -391,6 +383,10 @@ private fun ContactsSection(people: List<PreviewPerson>, query: String, onOpenPr
 @Composable
 private fun GroupsSection(groups: List<PreviewGroup>, query: String, onOpenGroup: (PreviewGroup) -> Unit) {
     val filtered = groups.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
+    if (filtered.isEmpty()) {
+        EmptyPanel("Sin grupos", "No hay grupos que coincidan con la búsqueda.")
+        return
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(filtered, key = { it.id }) { group ->
             Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().clickable { onOpenGroup(group) }) {
@@ -411,6 +407,10 @@ private fun GroupsSection(groups: List<PreviewGroup>, query: String, onOpenGroup
 @Composable
 private fun StatusSection(statuses: List<PreviewStatus>, query: String) {
     val filtered = statuses.filter { query.isBlank() || it.owner.contains(query, true) || it.body.contains(query, true) }
+    if (filtered.isEmpty()) {
+        EmptyPanel("Sin estados", "No hay estados que coincidan con la búsqueda.")
+        return
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(filtered, key = { it.id }) { status ->
             Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
