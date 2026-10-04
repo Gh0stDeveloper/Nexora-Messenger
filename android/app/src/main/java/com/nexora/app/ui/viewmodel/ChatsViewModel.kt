@@ -79,6 +79,8 @@ class ChatsViewModel(
         return repository.chatIdFor(cleanRecipient) to cleanRecipient
     }
 
+    fun previewChatFor(recipientId: String): Pair<String, String> = targetFor(recipientId)
+
     fun newChatTarget(): Pair<String, String>? {
         val recipientId = _state.value.recipientId.trim()
         if (recipientId.isBlank()) {
