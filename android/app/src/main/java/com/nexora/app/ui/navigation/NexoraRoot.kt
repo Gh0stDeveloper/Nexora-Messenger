@@ -1,5 +1,6 @@
 package com.nexora.app.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +33,7 @@ fun NexoraRoot() {
     val app = LocalContext.current.applicationContext as NexoraApplication
     val container = app.container
     var selectedChat by remember { mutableStateOf<SelectedChat?>(null) }
+    var showOwnProfile by remember { mutableStateOf(false) }
 
     val authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModelFactory(container.authRepository),
@@ -55,6 +57,7 @@ fun NexoraRoot() {
 
     val activeChat = selectedChat
     if (activeChat != null) {
+        BackHandler { selectedChat = null }
         val chatDetailViewModel: ChatDetailViewModel = viewModel(
             key = "chat-${activeChat.chatId}",
             factory = ChatDetailViewModelFactory(
@@ -75,6 +78,11 @@ fun NexoraRoot() {
     )
     ChatsScreen(
         viewModel = chatsViewModel,
+        profileName = profileState.profile?.name.orEmpty().ifBlank { "Ghost Developer" },
+        profilePhone = profileState.profile?.phone.orEmpty(),
+        showOwnProfile = showOwnProfile,
+        onToggleProfile = { showOwnProfile = !showOwnProfile },
+        onCloseProfile = { showOwnProfile = false },
         onOpenChat = { chatId, recipientId -> selectedChat = SelectedChat(chatId, recipientId) },
     )
 }
