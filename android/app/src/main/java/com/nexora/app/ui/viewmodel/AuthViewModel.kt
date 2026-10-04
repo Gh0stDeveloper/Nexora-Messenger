@@ -31,7 +31,7 @@ class AuthViewModel(
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     fun updatePhone(value: String) {
-        val normalized = PhoneNumberNormalizer.normalizeMexico(value)
+        val normalized = PhoneNumberNormalizer.normalizeInternational(value)
         _state.update { it.copy(phone = value, normalizedPhone = normalized, error = null) }
     }
 
@@ -42,9 +42,9 @@ class AuthViewModel(
     }
 
     fun requestOtp(activity: Activity) {
-        val normalized = PhoneNumberNormalizer.normalizeMexico(_state.value.phone)
-        if (!PhoneNumberNormalizer.isValidMexico(normalized)) {
-            _state.update { it.copy(error = "Escribe un número válido. Para México usa 10 dígitos; Nexora agrega +52 automáticamente.") }
+        val normalized = PhoneNumberNormalizer.normalizeInternational(_state.value.phone)
+        if (!PhoneNumberNormalizer.isValidInternational(normalized)) {
+            _state.update { it.copy(error = "Escribe un número válido con lada. Para México basta con 10 dígitos; Nexora agrega +52.") }
             return
         }
         _state.update { it.copy(loading = true, error = null, normalizedPhone = normalized) }
