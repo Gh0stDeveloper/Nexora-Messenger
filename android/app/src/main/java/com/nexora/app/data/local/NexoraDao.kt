@@ -17,6 +17,27 @@ interface NexoraDao {
     suspend fun getProfile(uid: String): LocalProfileEntity?
 
     @Upsert
+    suspend fun upsertContacts(contacts: List<ContactEntity>)
+
+    @Query("SELECT * FROM contacts ORDER BY isFavorite DESC, name COLLATE NOCASE ASC")
+    fun observeContacts(): Flow<List<ContactEntity>>
+
+    @Query("SELECT * FROM contacts WHERE uid = :uid LIMIT 1")
+    suspend fun getContact(uid: String): ContactEntity?
+
+    @Upsert
+    suspend fun upsertGroups(groups: List<GroupEntity>)
+
+    @Query("SELECT * FROM groups ORDER BY createdAt DESC")
+    fun observeGroups(): Flow<List<GroupEntity>>
+
+    @Upsert
+    suspend fun upsertStatuses(statuses: List<StatusEntity>)
+
+    @Query("SELECT * FROM statuses WHERE expiresAt > :now ORDER BY createdAt DESC")
+    fun observeActiveStatuses(now: Long = System.currentTimeMillis()): Flow<List<StatusEntity>>
+
+    @Upsert
     suspend fun upsertChats(chats: List<ChatEntity>)
 
     @Query("SELECT * FROM chats ORDER BY lastMessageEpochMs DESC")
