@@ -1,5 +1,7 @@
 package com.nexora.app.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,16 +19,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,10 +65,38 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexora.app.data.local.ChatEntity
 import com.nexora.app.ui.viewmodel.ChatsViewModel
-import com.nexora.app.ui.viewmodel.PreviewChatTarget
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private enum class MessengerTab(val label: String, val icon: ImageVector) {
+    Chats("Chats", Icons.Filled.Chat),
+    Contacts("Contactos", Icons.Filled.Person),
+    Groups("Grupos", Icons.Filled.Group),
+    Status("Estados", Icons.Outlined.Chat),
+}
+
+private data class PreviewPerson(
+    val uid: String,
+    val name: String,
+    val phone: String,
+    val status: String,
+    val avatar: String,
+)
+
+private data class PreviewGroup(
+    val id: String,
+    val name: String,
+    val members: String,
+    val description: String,
+)
+
+private data class PreviewStatus(
+    val id: String,
+    val owner: String,
+    val body: String,
+    val time: String,
+)
 
 @Composable
 fun ChatsScreen(
@@ -58,19 +109,82 @@ fun ChatsScreen(
     onOpenChat: (chatId: String, recipientId: String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var activeTab by remember { mutableStateOf(MessengerTab.Chats) }
+    var searchQuery by remember { mutableStateOf("") }
     var showComposer by remember { mutableStateOf(false) }
-    var activeTab by remember { mutableStateOf("Chats") }
+    var selectedPerson by remember { mutableStateOf<PreviewPerson?>(null) }
+    var ownNameDraft by remember(profileName) { mutableStateOf(profileName.ifBlank { "Ghost Developer" }) }
+    var ownStatusDraft by remember { mutableStateOf("Disponible") }
+    var editingOwnProfile by remember { mutableStateOf(false) }
+
+    val previewPeople = remember {
+        listOf(
+            PreviewPerson("preview_friend_akira", "Akira Preview", "+52 668 000 1122", "Probando Nexora Messenger", "A"),
+            PreviewPerson("preview_friend_miko", "Miko Dev", "+52 668 000 3344", "Disponible para pruebas", "M"),
+            PreviewPerson("preview_friend_kenji", "Kenji QA", "+52 668 000 5566", "Revisando cifrado", "K"),
+        )
+    }
+    val previewGroups = remember {
+        listOf(
+            PreviewGroup("group_nexora_testers", "Nexora Testers", "4 miembros", "Grupo de pruebas para mensajes, multimedia y estados."),
+            PreviewGroup("group_design_review", "Design Review", "3 miembros", "Revisión de UI/UX y experiencia mobile."),
+        )
+    }
+    val previewStatuses = remember {
+        listOf(
+            PreviewStatus("status_me", ownNameDraft, "Trabajando en Nexora Messenger", "Ahora"),
+            PreviewStatus("status_akira", "Akira Preview", "Probando chats cifrados", "22:40"),
+            PreviewStatus("status_miko", "Miko Dev", "Nuevo diseño en revisión", "21:58"),
+        )
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            MessengerHeader(
+                profileName = ownNameDraft,
+                profilePhone = profilePhone,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                onToggleProfile = onToggleProfile,
+                onSync = viewModel::refresh,
+            )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                MessengerTab.entries.forEach { tab ->
+                    NavigationBarItem(
+                        selected = activeTab == tab,
+                        onClick = { activeTab = tab; showComposer = false },
+                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        label = { Text(tab.label) },
+                    )
+                }
+            }
+        },
         floatingActionButton = {
-            if (activeTab == "Chats") {
-                ExtendedFloatingActionButton(
+            when (activeTab) {
+                MessengerTab.Chats -> ExtendedFloatingActionButton(
                     onClick = { showComposer = !showComposer },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) { Text(if (showComposer) "Cerrar" else "Nuevo chat") }
+                    icon = { Icon(if (showComposer) Icons.Filled.Close else Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(if (showComposer) "Cerrar" else "Nuevo chat") },
+                )
+                MessengerTab.Contacts -> ExtendedFloatingActionButton(
+                    onClick = { selectedPerson = previewPeople.first() },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                    text = { Text("Ver perfil") },
+                )
+                MessengerTab.Groups -> ExtendedFloatingActionButton(
+                    onClick = { onOpenChat("group_nexora_testers", "group_nexora_testers") },
+                    icon = { Icon(Icons.Filled.Group, contentDescription = null) },
+                    text = { Text("Abrir grupo") },
+                )
+                MessengerTab.Status -> ExtendedFloatingActionButton(
+                    onClick = {},
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Nuevo estado") },
+                )
             }
         },
     ) { paddingValues ->
@@ -79,77 +193,43 @@ fun ChatsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .imePadding()
-                .background(MaterialTheme.colorScheme.background),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MessengerHeader(
-                profileName = profileName,
-                profilePhone = profilePhone,
-                onToggleProfile = onToggleProfile,
-                onSync = viewModel::refresh,
-            )
-
-            if (showOwnProfile) {
+            AnimatedVisibility(showOwnProfile) {
                 OwnProfileCard(
-                    profileName = profileName,
+                    profileName = ownNameDraft,
                     profilePhone = profilePhone,
-                    onClose = onCloseProfile,
+                    status = ownStatusDraft,
+                    editing = editingOwnProfile,
+                    onNameChange = { ownNameDraft = it.take(40) },
+                    onStatusChange = { ownStatusDraft = it.take(80) },
+                    onEdit = { editingOwnProfile = true },
+                    onSave = { editingOwnProfile = false },
+                    onClose = { editingOwnProfile = false; onCloseProfile() },
                 )
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("Chats", "Contactos", "Grupos", "Estados").forEach { tab ->
-                        FilterChip(
-                            selected = activeTab == tab,
-                            onClick = { activeTab = tab },
-                            label = { Text(tab) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-
-                if (showComposer && activeTab == "Chats") {
-                    NewChatCard(
-                        targets = viewModel.previewTargets,
-                        recipientId = state.recipientId,
-                        onRecipientChange = viewModel::updateRecipientId,
-                        onPreviewOpen = { target ->
-                            val resolved = viewModel.targetFor(target.recipientId)
+            AnimatedVisibility(showComposer && activeTab == MessengerTab.Chats) {
+                NewChatCard(
+                    recipientId = state.recipientId,
+                    people = previewPeople,
+                    onRecipientChange = viewModel::updateRecipientId,
+                    onOpenPreview = { person -> onOpenChat(viewModel.previewChatFor(person.uid).first, person.uid) },
+                    onOpenAdvanced = {
+                        viewModel.newChatTarget()?.let { (chatId, recipientId) ->
                             showComposer = false
-                            onOpenChat(resolved.first, resolved.second)
-                        },
-                        onManualOpen = {
-                            viewModel.newChatTarget()?.let { (chatId, recipientId) ->
-                                showComposer = false
-                                onOpenChat(chatId, recipientId)
-                            }
-                        },
-                    )
-                }
+                            onOpenChat(chatId, recipientId)
+                        }
+                    },
+                )
+            }
 
-                when (activeTab) {
-                    "Contactos" -> PreviewCollectionPanel(
-                        title = "Contactos",
-                        body = "Agenda preparada para sincronizar usuarios reales desde tu VPS.",
-                        rows = viewModel.previewTargets.map { it.title to it.subtitle },
-                    )
-                    "Grupos" -> PreviewCollectionPanel(
-                        title = "Grupos",
-                        body = "Grupos cifrados listos para miembros, roles y multimedia privada.",
-                        rows = listOf("Nexora Testers" to "Grupo preview local"),
-                    )
-                    "Estados" -> PreviewCollectionPanel(
-                        title = "Estados",
-                        body = "Estados cifrados con expiración automática. En preview se muestran datos locales.",
-                        rows = listOf("Ghost Developer" to "Probando Nexora Messenger"),
-                    )
-                    else -> ChatList(
+            AnimatedContent(targetState = activeTab, label = "tab-content") { tab ->
+                when (tab) {
+                    MessengerTab.Chats -> ChatList(
                         chats = state.chats,
+                        query = searchQuery,
                         loading = state.loading,
                         error = state.error,
                         onOpenChat = { chat ->
@@ -157,9 +237,35 @@ fun ChatsScreen(
                             onOpenChat(target.first, target.second)
                         },
                     )
+                    MessengerTab.Contacts -> ContactsSection(
+                        people = previewPeople,
+                        query = searchQuery,
+                        onOpenProfile = { selectedPerson = it },
+                        onOpenChat = { person -> onOpenChat(viewModel.previewChatFor(person.uid).first, person.uid) },
+                    )
+                    MessengerTab.Groups -> GroupsSection(
+                        groups = previewGroups,
+                        query = searchQuery,
+                        onOpenGroup = { group -> onOpenChat(group.id, group.id) },
+                    )
+                    MessengerTab.Status -> StatusSection(
+                        statuses = previewStatuses,
+                        query = searchQuery,
+                    )
                 }
             }
         }
+    }
+
+    selectedPerson?.let { person ->
+        UserProfileDialog(
+            person = person,
+            onDismiss = { selectedPerson = null },
+            onMessage = {
+                selectedPerson = null
+                onOpenChat(viewModel.previewChatFor(person.uid).first, person.uid)
+            },
+        )
     }
 }
 
@@ -167,176 +273,203 @@ fun ChatsScreen(
 private fun MessengerHeader(
     profileName: String,
     profilePhone: String,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
     onToggleProfile: () -> Unit,
     onSync: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 3.dp) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clickable(onClick = onToggleProfile),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(profileName.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Avatar(text = profileName, modifier = Modifier.clickable(onClick = onToggleProfile))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Nexora", fontSize = 25.sp, fontWeight = FontWeight.Black)
+                    Text(profilePhone.ifBlank { "Messenger privado" }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
+                IconButton(onClick = onSync) { Icon(Icons.Filled.Sync, contentDescription = "Sincronizar") }
+                IconButton(onClick = onToggleProfile) { Icon(Icons.Filled.MoreVert, contentDescription = "Más") }
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Nexora", fontSize = 25.sp, fontWeight = FontWeight.Black)
-                Text(profilePhone.ifBlank { "Messenger privado" }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
-            Text("Buscar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text("Sync", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onSync))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchChange,
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Buscar") },
+                placeholder = { Text("Buscar chats, contactos, grupos o estados") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun OwnProfileCard(profileName: String, profilePhone: String, onClose: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun OwnProfileCard(
+    profileName: String,
+    profilePhone: String,
+    status: String,
+    editing: Boolean,
+    onNameChange: (String) -> Unit,
+    onStatusChange: (String) -> Unit,
+    onEdit: () -> Unit,
+    onSave: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Surface(modifier = Modifier.size(70.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(profileName.firstOrNull()?.uppercase() ?: "N", fontSize = 28.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
+                Avatar(text = profileName, large = true)
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(profileName, fontSize = 22.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Mi perfil", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f))
+                    if (editing) {
+                        OutlinedTextField(value = profileName, onValueChange = onNameChange, label = { Text("Nombre") }, singleLine = true)
+                    } else {
+                        Text(profileName, fontSize = 22.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
                     Text(profilePhone.ifBlank { "Sin teléfono visible" }, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f))
-                    Text("Disponible", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f))
                 }
-                Text("Cerrar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onClose))
+                IconButton(onClick = if (editing) onSave else onEdit) {
+                    Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, contentDescription = null)
+                }
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Cerrar") }
             }
-            Text("Perfil propio: foto, nombre, estado, privacidad y seguridad quedan centralizados aquí.", color = MaterialTheme.colorScheme.onPrimaryContainer)
+            if (editing) {
+                OutlinedTextField(value = status, onValueChange = onStatusChange, label = { Text("Estado") }, modifier = Modifier.fillMaxWidth())
+            } else {
+                Text(status, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Text("Privacidad, seguridad, foto, nombre y estado quedan centralizados aquí.", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f), fontSize = 12.sp)
         }
     }
 }
 
 @Composable
 private fun NewChatCard(
-    targets: List<PreviewChatTarget>,
     recipientId: String,
+    people: List<PreviewPerson>,
     onRecipientChange: (String) -> Unit,
-    onPreviewOpen: (PreviewChatTarget) -> Unit,
-    onManualOpen: () -> Unit,
+    onOpenPreview: (PreviewPerson) -> Unit,
+    onOpenAdvanced: () -> Unit,
 ) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Iniciar conversación", fontWeight = FontWeight.Black, fontSize = 18.sp)
-            Text("Para probar sin servidor, abre un contacto preview. En producción esto saldrá de tu agenda real.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            targets.forEach { target ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onPreviewOpen(target) }
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Surface(modifier = Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(target.title.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(target.title, fontWeight = FontWeight.Bold)
-                        Text(target.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    }
-                    Text("Abrir", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                }
+            Text("Nuevo chat", fontWeight = FontWeight.Black, fontSize = 19.sp)
+            Text("Elige un contacto de prueba. El UID queda disponible solo para revisión técnica.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            people.take(2).forEach { person ->
+                ContactRow(person = person, onOpenProfile = {}, onOpenChat = { onOpenPreview(person) })
             }
-            OutlinedTextField(
-                value = recipientId,
-                onValueChange = onRecipientChange,
-                label = { Text("UID manual avanzado") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(onClick = onManualOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Text("Abrir UID manual")
-            }
+            OutlinedTextField(value = recipientId, onValueChange = onRecipientChange, label = { Text("UID avanzado") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button(onClick = onOpenAdvanced, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Text("Abrir UID avanzado") }
         }
     }
 }
 
 @Composable
-private fun ChatList(chats: List<ChatEntity>, loading: Boolean, error: String?, onOpenChat: (ChatEntity) -> Unit) {
+private fun ChatList(chats: List<ChatEntity>, query: String, loading: Boolean, error: String?, onOpenChat: (ChatEntity) -> Unit) {
     if (loading) Text("Sincronizando…", color = MaterialTheme.colorScheme.primary)
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    if (chats.isEmpty()) {
-        PreviewCollectionPanel("Sin conversaciones", "Toca Nuevo chat para abrir una conversación de prueba. Después se llenará desde contactos reales.", emptyList())
+    val filtered = chats.filter { chat ->
+        query.isBlank() || (chat.title ?: chat.chatId).contains(query, ignoreCase = true) || chat.lastMessagePreview.contains(query, ignoreCase = true)
+    }
+    if (filtered.isEmpty()) {
+        EmptyPanel("Sin conversaciones", "Toca Nuevo chat para abrir una conversación de prueba o busca otro término.")
         return
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(chats, key = { it.chatId }) { chat ->
-            ChatItem(chat = chat, onClick = { onOpenChat(chat) })
+        items(filtered, key = { it.chatId }) { chat -> ChatItem(chat = chat, onClick = { onOpenChat(chat) }) }
+    }
+}
+
+@Composable
+private fun ContactsSection(people: List<PreviewPerson>, query: String, onOpenProfile: (PreviewPerson) -> Unit, onOpenChat: (PreviewPerson) -> Unit) {
+    val filtered = people.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query, true) || it.status.contains(query, true) }
+    if (filtered.isEmpty()) { EmptyPanel("Sin contactos", "No hay contactos que coincidan con la búsqueda."); return }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(filtered, key = { it.uid }) { person -> ContactRow(person, onOpenProfile = { onOpenProfile(person) }, onOpenChat = { onOpenChat(person) }) }
+    }
+}
+
+@Composable
+private fun GroupsSection(groups: List<PreviewGroup>, query: String, onOpenGroup: (PreviewGroup) -> Unit) {
+    val filtered = groups.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(filtered, key = { it.id }) { group ->
+            Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().clickable { onOpenGroup(group) }) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Avatar(group.name)
+                    Column(Modifier.weight(1f)) {
+                        Text(group.name, fontWeight = FontWeight.Black)
+                        Text(group.description, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(group.members, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    }
+                    Icon(Icons.Filled.Group, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun PreviewCollectionPanel(title: String, body: String, rows: List<Pair<String, String>>) {
-    Card(
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, fontWeight = FontWeight.Black, fontSize = 19.sp)
-            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            rows.forEach { row ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Surface(modifier = Modifier.size(38.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(row.first.firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                    Column {
-                        Text(row.first, fontWeight = FontWeight.Bold)
-                        Text(row.second, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+private fun StatusSection(statuses: List<PreviewStatus>, query: String) {
+    val filtered = statuses.filter { query.isBlank() || it.owner.contains(query, true) || it.body.contains(query, true) }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(filtered, key = { it.id }) { status ->
+            Card(shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Avatar(status.owner)
+                    Column(Modifier.weight(1f)) {
+                        Text(status.owner, fontWeight = FontWeight.Black)
+                        Text(status.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(status.time, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ContactRow(person: PreviewPerson, onOpenProfile: () -> Unit, onOpenChat: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onOpenProfile).padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Avatar(person.avatar)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(person.name, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(person.status, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(person.phone, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+        }
+        IconButton(onClick = onOpenChat) { Icon(Icons.Filled.Chat, contentDescription = "Mensaje") }
+    }
+}
+
+@Composable
+private fun UserProfileDialog(person: PreviewPerson, onDismiss: () -> Unit, onMessage: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { Button(onClick = onMessage) { Text("Mensaje") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
+        icon = { Avatar(person.name, large = true) },
+        title = { Text(person.name, fontWeight = FontWeight.Black) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(person.phone)
+                Text(person.status, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Perfil ajeno preparado para foto, estado, bloqueo, privacidad y acciones de seguridad.")
+            }
+        },
+    )
 }
 
 @Composable
 private fun ChatItem(chat: ChatEntity, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Surface(modifier = Modifier.size(54.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-            Box(contentAlignment = Alignment.Center) {
-                Text((chat.title ?: chat.chatId).firstOrNull()?.uppercase() ?: "N", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
+        Avatar(chat.title ?: chat.chatId)
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(chat.title ?: chat.chatId, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -348,8 +481,24 @@ private fun ChatItem(chat: ChatEntity, onClick: () -> Unit) {
     }
 }
 
-private fun formatTime(epochMs: Long): String = if (epochMs <= 0) {
-    ""
-} else {
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMs))
+@Composable
+private fun EmptyPanel(title: String, body: String) {
+    Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontWeight = FontWeight.Black, fontSize = 19.sp)
+            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
+
+@Composable
+private fun Avatar(text: String, modifier: Modifier = Modifier, large: Boolean = false) {
+    val size = if (large) 70.dp else 52.dp
+    Surface(modifier = modifier.size(size), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(text.firstOrNull()?.uppercase() ?: "N", fontSize = if (large) 28.sp else 18.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    }
+}
+
+private fun formatTime(epochMs: Long): String = if (epochMs <= 0) "" else SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMs))
