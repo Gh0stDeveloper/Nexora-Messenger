@@ -18,11 +18,34 @@ android {
         applicationId = "com.nexora.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0-dev"
+        versionCode = 3
+        versionName = "1.2.0-dev"
 
         val relayUrl = providers.gradleProperty("NEXORA_RELAY_BASE_URL").orNull ?: "http://10.0.2.2:8080"
         buildConfigField("String", "NEXORA_RELAY_BASE_URL", "\"$relayUrl\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            val storeFilePath = providers.gradleProperty("NEXORA_KEYSTORE_FILE").orNull
+            if (!storeFilePath.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = providers.gradleProperty("NEXORA_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.gradleProperty("NEXORA_KEY_ALIAS").orNull
+                keyPassword = providers.gradleProperty("NEXORA_KEY_PASSWORD").orNull
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {
