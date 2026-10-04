@@ -80,9 +80,12 @@ fun NexoraRoot() {
         viewModel = chatsViewModel,
         profileName = profileState.profile?.name.orEmpty().ifBlank { "Ghost Developer" },
         profilePhone = profileState.profile?.phone.orEmpty(),
+        profileSaving = profileState.loading,
+        profileError = profileState.error,
         showOwnProfile = showOwnProfile,
         onToggleProfile = { showOwnProfile = !showOwnProfile },
         onCloseProfile = { showOwnProfile = false },
+        onSaveProfileName = profileViewModel::saveDisplayName,
         onOpenChat = { chatId, recipientId -> selectedChat = SelectedChat(chatId, recipientId) },
     )
 }
