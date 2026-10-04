@@ -7,6 +7,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.nexora.app.data.crypto.LocalKeyManager
 import com.nexora.app.data.local.LocalProfileEntity
 import com.nexora.app.data.local.NexoraDao
+import com.nexora.app.data.preview.PreviewSession
 import com.nexora.app.data.remote.BootstrapProfileRequest
 import com.nexora.app.data.remote.FcmTokenRequest
 import com.nexora.app.data.remote.RelayApi
@@ -24,40 +25,50 @@ class ProfileRepository(
     private val dao: NexoraDao,
     private val keyManager: LocalKeyManager,
 ) {
-    fun observeCurrentProfile(): Flow<LocalProfileEntity?> {
-        val uid = requireNotNull(auth.currentUser?.uid) { "User must be signed in" }
-        return dao.observeProfile(uid)
-    }
+    private val currentUid: String
+        get() = PreviewSession.uid ?: requireNotNull(auth.currentUser?.uid) { "User must be signed in" }
+
+    private val currentPhone: String
+        get() = PreviewSession.phone ?: auth.currentUser?.phoneNumber.orEmpty()
+
+    fun observeCurrentProfile(): Flow<LocalProfileEntity?> = dao.observeProfile(currentUid)
 
     suspend fun completeProfile(name: String, avatarUri: Uri?): LocalProfileEntity {
-        val user = requireNotNull(auth.currentUser) { "User must be signed in" }
+        val uid = currentUid
+        val phone = currentPhone
         val trimmedName = name.trim()
         require(trimmedName.length >= 2) { "El nombre debe tener mínimo 2 caracteres" }
 
         val publicKey = keyManager.getOrCreatePublicKey()
-        val fcmToken = runCatching { messaging.token.await() }.getOrNull()
+        val fcmToken = if (PreviewSession.active) null else runCatching { messaging.token.await() }.getOrNull()
         var photoUrl: String? = null
 
-        relayApi.bootstrapProfile(
-            BootstrapProfileRequest(
-                name = trimmedName,
-                phone = user.phoneNumber,
-                publicKey = publicKey,
-                fcmToken = fcmToken,
-            ),
-        )
+        if (!PreviewSession.active) {
+            runCatching {
+                relayApi.bootstrapProfile(
+                    BootstrapProfileRequest(
+                        name = trimmedName,
+                        phone = phone,
+                        publicKey = publicKey,
+                        fcmToken = fcmToken,
+                    ),
+                )
+            }
 
-        if (avatarUri != null) {
-            photoUrl = uploadAvatar(avatarUri)
-        }
+            if (avatarUri != null) {
+                photoUrl = uploadAvatar(avatarUri)
+            }
 
-        if (!fcmToken.isNullOrBlank()) {
-            relayApi.syncFcmToken(FcmTokenRequest(fcmToken))
+            if (!fcmToken.isNullOrBlank()) {
+                runCatching { relayApi.syncFcmToken(FcmTokenRequest(fcmToken)) }
+            }
+        } else {
+            photoUrl = null
         }
 
         val entity = LocalProfileEntity(
-            uid = user.uid,
-            phone = user.phoneNumber.orEmpty(),
+            uid = uid,
+            phone = phone,
             name = trimmedName,
             photoUrl = photoUrl,
             publicKey = publicKey,
