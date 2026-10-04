@@ -30,7 +30,7 @@ class AuthRepository(
         onAutoVerified: (String) -> Unit,
         onError: (Throwable) -> Unit,
     ) {
-        val normalized = PhoneNumberNormalizer.normalizeMexico(phone)
+        val normalized = PhoneNumberNormalizer.normalizeInternational(phone)
         if (normalized == PreviewSession.PreviewPhone) {
             PreviewSession.enable()
             onCodeSent("preview-verification")
