@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -54,6 +53,7 @@ import com.nexora.app.ui.viewmodel.AuthViewModel
 import com.nexora.app.util.CountryDialCode
 import com.nexora.app.util.CountryDialCodes
 import com.nexora.app.util.buildInternationalPhone
+import com.nexora.app.util.nationalPhoneInput
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel) {
@@ -62,6 +62,7 @@ fun AuthScreen(viewModel: AuthViewModel) {
     var selectedCountry by remember { mutableStateOf(CountryDialCodes.defaultMexico) }
     var countrySearch by remember { mutableStateOf("") }
     var showCountryPicker by remember { mutableStateOf(false) }
+    var phoneInput by remember { mutableStateOf("") }
 
     val hasOtp = state.verificationId != null
     BackHandler(enabled = showCountryPicker || hasOtp) {
@@ -95,9 +96,10 @@ fun AuthScreen(viewModel: AuthViewModel) {
                     onClose = { showCountryPicker = false },
                     onSelect = { country ->
                         selectedCountry = country
+                        phoneInput = nationalPhoneInput(country, phoneInput)
                         countrySearch = ""
                         showCountryPicker = false
-                        viewModel.updatePhone(buildInternationalPhone(country, state.phone))
+                        viewModel.updatePhone(buildInternationalPhone(country, phoneInput))
                     },
                 )
             } else if (hasOtp) {
@@ -114,13 +116,16 @@ fun AuthScreen(viewModel: AuthViewModel) {
             } else {
                 PhoneStep(
                     country = selectedCountry,
-                    phone = state.phone,
+                    phone = phoneInput,
                     normalizedPhone = state.normalizedPhone,
                     loading = state.loading,
                     error = state.error,
                     activity = activity,
                     onCountryClick = { showCountryPicker = true },
-                    onPhoneChange = { raw -> viewModel.updatePhone(buildInternationalPhone(selectedCountry, raw)) },
+                    onPhoneChange = { raw ->
+                        phoneInput = nationalPhoneInput(selectedCountry, raw)
+                        viewModel.updatePhone(buildInternationalPhone(selectedCountry, phoneInput))
+                    },
                     onRequestOtp = { activity?.let(viewModel::requestOtp) },
                 )
             }
@@ -152,7 +157,7 @@ private fun PhoneStep(
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
                 Text("Verifica tu teléfono", fontWeight = FontWeight.Black, fontSize = 24.sp)
                 Text(
-                    "Elige tu país y escribe solo tu número. Nexora genera la lada internacional automáticamente.",
+                    "Elige tu país y escribe solo tu número nacional. Nexora agrega la lada automáticamente.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp,
                 )
@@ -176,8 +181,8 @@ private fun PhoneStep(
                     OutlinedTextField(
                         value = phone,
                         onValueChange = onPhoneChange,
-                        label = { Text("Número telefónico") },
-                        placeholder = { Text("6681234567") },
+                        label = { Text("Número nacional") },
+                        placeholder = { Text(if (country.iso == "MX") "6681234567" else "Número local") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         modifier = Modifier.weight(1f),
