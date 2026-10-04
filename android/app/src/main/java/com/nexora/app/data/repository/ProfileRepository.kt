@@ -36,8 +36,7 @@ class ProfileRepository(
     suspend fun completeProfile(name: String, avatarUri: Uri?): LocalProfileEntity {
         val uid = currentUid
         val phone = currentPhone
-        val trimmedName = name.trim()
-        require(trimmedName.length >= 2) { "El nombre debe tener mínimo 2 caracteres" }
+        val trimmedName = validateName(name)
 
         val publicKey = keyManager.getOrCreatePublicKey()
         val fcmToken = if (PreviewSession.active) null else runCatching { messaging.token.await() }.getOrNull()
@@ -62,8 +61,6 @@ class ProfileRepository(
             if (!fcmToken.isNullOrBlank()) {
                 runCatching { relayApi.syncFcmToken(FcmTokenRequest(fcmToken)) }
             }
-        } else {
-            photoUrl = null
         }
 
         val entity = LocalProfileEntity(
@@ -76,6 +73,39 @@ class ProfileRepository(
         )
         dao.upsertProfile(entity)
         return entity
+    }
+
+    suspend fun updateDisplayName(name: String): LocalProfileEntity {
+        val uid = currentUid
+        val trimmedName = validateName(name)
+        val current = requireNotNull(dao.getProfile(uid)) { "No existe un perfil local para actualizar" }
+        val publicKey = current.publicKey ?: keyManager.getOrCreatePublicKey()
+
+        if (!PreviewSession.active) {
+            runCatching {
+                relayApi.bootstrapProfile(
+                    BootstrapProfileRequest(
+                        name = trimmedName,
+                        phone = current.phone.ifBlank { currentPhone },
+                        publicKey = publicKey,
+                        fcmToken = null,
+                    ),
+                )
+            }
+        }
+
+        return current.copy(
+            name = trimmedName,
+            publicKey = publicKey,
+            updatedAt = System.currentTimeMillis(),
+        ).also { dao.upsertProfile(it) }
+    }
+
+    private fun validateName(name: String): String {
+        val trimmedName = name.trim()
+        require(trimmedName.length >= 2) { "El nombre debe tener mínimo 2 caracteres" }
+        require(trimmedName.length <= 80) { "El nombre debe tener máximo 80 caracteres" }
+        return trimmedName
     }
 
     private suspend fun uploadAvatar(uri: Uri): String {
