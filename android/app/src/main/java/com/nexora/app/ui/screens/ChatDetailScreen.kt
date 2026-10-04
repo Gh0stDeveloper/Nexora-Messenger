@@ -77,7 +77,7 @@ fun ChatDetailScreen(
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+            listState.animateScrollToItem(state.messages.size)
         }
     }
 
